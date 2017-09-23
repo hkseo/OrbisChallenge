@@ -1,2 +1,0 @@
-# OrbisChallenge
-LUMINUS game
