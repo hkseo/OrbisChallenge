@@ -11,6 +11,16 @@ class PlayerAI:
         """
         pass
 
+    
+    def break_enemy_nest(self, world, unit, excluding_points = ()):
+        '''
+        '''
+        point = unit.position
+        get_closest_enemy_nest_from(point, excluding_points)
+        
+        
+        
+    
     def do_move(self, world, friendly_units, enemy_units):
         """
         This method will get called every turn.
