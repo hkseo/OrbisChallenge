@@ -345,10 +345,16 @@ class PlayerAI:
                 self.attack_enemy(world, unit)
                 continue
             
+            elif choice < 570:
+                print("break clusters")
+                self.break_enemy_cluster(world, unit)
+                continue                
+                    
             elif choice < 600: 
                 print('break nest')
                 self.break_enemy_nest(world, unit)
                 continue
+            
             else:
                 print('acquire tiles')
                 self.acquire_tiles(unit, world)
