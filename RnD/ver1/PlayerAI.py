@@ -202,17 +202,26 @@ class PlayerAI:
     
     def move_away_from_nest(self, world, unit, nest_pos):
         if unit.position[0] > nest_pos[0]: 
-            world.move(unit, (unit.position[0]+1, unit.position[1]))
-            return
+            try: 
+                world.move(unit, (unit.position[0]+1, unit.position[1]))
+                return
+            except: pass
         elif unit.position[0] < nest_pos[0]:
-            world.move(unit, (unit.position[0]-1, unit.position[1]))
-            return            
+            try: 
+                world.move(unit, (unit.position[0]-1, unit.position[1]))
+                return      
+            except: pass
         elif unit.position[1] > nest_pos[1]:
-            world.move(unit, (unit.position[0], unit.position[1]+1))
-            return            
+            try: 
+                world.move(unit, (unit.position[0], unit.position[1]+1))
+                return            
+            except: pass
         elif unit.position[1] < nest_pos[1]:
-            world.move(unit, (unit.position[0], unit.position[1]-1))
-            return
+            try:
+                world.move(unit, (unit.position[0], unit.position[1]-1))
+                return
+            except: pass
+        self.acquire_tiles(unit,world)
         
     def is_close_to_friendly_nest(self, world, unit, steps):
         # return nest_pos if within STEPS steps of the nest
@@ -324,16 +333,19 @@ class PlayerAI:
                 continue
             
             # If close to a nest AND enemies are far away, move away from nest
-            nest_pos = self.is_close_to_friendly_nest(world, unit, 5)
+            nest_pos = self.is_close_to_friendly_nest(world, unit, 6)
             if nest_pos:
                 self.move_away_from_nest(world, unit, nest_pos)
             
+            elif choice < 400:
+                self.build_nest(world, unit)
             
-            elif choice < 300: 
+            elif choice < 500: 
                 print('attack enemy')
                 self.attack_enemy(world, unit)
                 continue
-            elif choice < 700: 
+            
+            elif choice < 600: 
                 print('break nest')
                 self.break_enemy_nest(world, unit)
                 continue
