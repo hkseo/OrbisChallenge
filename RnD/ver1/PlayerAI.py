@@ -16,14 +16,17 @@ class PlayerAI:
         '''
         '''
         point = unit.position
-        nest_tile = get_closest_enemy_nest_from(point, excluding_points)
+        nest_tile = world.get_closest_enemy_nest_from(point, excluding_points)
         if nest_tile:
             world.move(unit, nest_tile.position)
 
-    def attack_enemy(self, world):
+    def attack_enemy(self, world, unit, excluding_points = ()):
         '''
         '''
-        
+        point = unit.position
+        enemy_unit = world.get_closest_enemy_from(point, excluding_points)
+        if enemy_unit:
+            world.move(unit, enemy_unit.position)
     
     def do_move(self, world, friendly_units, enemy_units):
         """
@@ -33,7 +36,11 @@ class PlayerAI:
         :param friendly_units: list of FriendlyUnit objects
         :param enemy_units: list of EnemyUnit objects
         """
-        return
+        #for unit in friendly_units:
+            #self.attack_enemy(world, unit)
+        
+        
+    
         # Fly away to freedom, daring fireflies
         # Build thou nests
         # Grow, become stronger
