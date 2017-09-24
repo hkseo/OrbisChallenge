@@ -23,6 +23,43 @@ class PlayerAI:
     def attack_enemy(self, world):
         '''
         '''
+    
+    # DEFEND NEST BEGIN ********************************************************
+        
+    def defend_nest_move(self, unit, world, nest_pos, enemy_units):
+        '''
+        Move unit to one of the four tiles around a nest to defend it, if it is still open
+        '''
+        for direction in world.get_tiles_around(nest_pos):
+            dest_tile = world.get_tiles_around(nest_pos)[direction]
+            if not dest_tile.is_friendly:
+                world.move(unit, dest_tile.position)
+                return
+        # At this point, all adjacent points around nest_pos are frienldy-owned
+        # Move to one at random (later, modify to move to one with lowest health)
+        world.move(unit, dest_tile.position)
+        
+        
+        
+    def is_defending_nest(self, unit, world):
+        '''
+        Return True if a unit is currently defending a nest
+        If so, it probably shouldn't move
+        '''
+        point = unit.position
+        if is_adjacent(point, get_closest_friendly_nest_from(point, excluding_points).position):
+            return True
+        return False
+     
+         
+    def is_defended(self, world, point):
+        '''
+        return the number of squares adjacent to point that are held by friendly units
+        '''
+        return len(world.get_friendly_tiles_around(point))
+    
+    # DEFEND NEST END **********************************************************
+    
         
     def acquire_tiles(self, unit, world):
         '''
