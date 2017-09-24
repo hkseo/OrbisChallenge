@@ -10,8 +10,8 @@ class PlayerAI:
         """
             Any instantiation code goes here
         """
-        self.exclusion_list = []
         self.goal_tiles = []
+        self.avoid_tiles = []
     
     def break_enemy_cluster(self, world, unit):
         '''
@@ -25,6 +25,12 @@ class PlayerAI:
                     best_dist[c_point] = world.get_shortest_path_distance(unit.position, list(c_point))
             
             point = min(best_dist, key = best_dist.get)
+            
+            #avoids the neutral tile
+            path = world.get_shortest_path(unit.position, point, self.goal_tiles)
+            if path:
+                world.move(unit, path[0]);
+                return            
             world.move(unit, point)
         
     
@@ -37,6 +43,11 @@ class PlayerAI:
         point = unit.position            
         nest_tile = world.get_closest_enemy_nest_from(point, excluding_points)
         if nest_tile:
+            #avoids the neutral tile
+            path = world.get_shortest_path(point, nest_tile, self.goal_tiles)            
+            if path:
+                world.move(unit, path[0]);
+                return            
             world.move(unit, nest_tile)
 
     def attack_enemy(self, world, unit, excluding_points = ()):
@@ -47,6 +58,10 @@ class PlayerAI:
         point = unit.position
         enemy_unit = world.get_closest_enemy_from(point, excluding_points)
         if enemy_unit:
+            #avoids the neutral tile
+            path = world.get_shortest_path(point, enemy_unit.position, self.goal_tiles)            
+            if path:
+                world.move(unit, path[0]);          
             world.move(unit, enemy_unit.position)
 
     def build_nest(self, world, unit, excluding_points = ()):
@@ -55,44 +70,53 @@ class PlayerAI:
         2) Create the nest space.
         3) Aim get_friendly_nest_clustersfor nests that are far away from the enemy.
         '''
-        
-        point = unit.position
         friendly_cluster_points = world.get_friendly_nest_clusters()
-        friendly_nest_points = world.get_friendly_nest_positions()
+        friendly_nest_points = world.get_friendly_nest_positions() 
+        if self.goal_tiles:
+            #Get rid of non neutral tiles from the goal tiles
+            for i in range(len(self.goal_tiles)):
+                if (not world.get_tile_at(self.goal_tiles[i]).is_neutral()) or (self.overlaps(world, self.goal_tiles[i], friendly_nest_points, friendly_cluster_points)):
+                #if (not world.get_tile_at(self.goal_tiles[i]).is_neutral()):
+                    popped = self.goal_tiles.pop(i)
+            
+        point = unit.position
+        
         neutral_tiles = world.get_neutral_tiles()
         best_dist = {}
         if not self.goal_tiles:
             for neutral_tile in neutral_tiles:
                 neutral_point = neutral_tile.position
                 #if the neutral point is near the cluster point or the nest point, just acquire the tile
-                if self.overlaps(world, neutral_point, friendly_nest_points, friendly_cluster_points):
+                if self.overlaps(world, neutral_point, friendly_nest_points):
                     continue
-                else:
-                    #Heuristics: find neutral point that is further away from enemy and also close to forming the nest.
-                    length = world.get_shortest_path_distance(neutral_point, world.get_closest_enemy_nest_from(neutral_point, excluding_points))*(self.num_adjacent(world, neutral_point))
-                    best_dist[neutral_point] = length
+                #else:
+                #Heuristics: find neutral point that is further away from enemy and also close to forming the nest.
+                length = world.get_shortest_path_distance(neutral_point, world.get_closest_enemy_nest_from(neutral_point, excluding_points))*(self.num_adjacent(world, neutral_point))
+                best_dist[neutral_point] = length
 
         if best_dist:
             dest_point = max(best_dist, key = best_dist.get)
-            self.goal_tiles.append(dest_point)
+            if dest_point not in self.goal_tiles:
+                self.goal_tiles.append(dest_point)
         else:
-            dest_point = self.goal_tiles[0]
+            dest_point = self.goal_tiles[randint(0,len(self.goal_tiles)-1)]
         friendly_tiles = world.get_friendly_tiles_around(dest_point)
         neighbours = world.get_neighbours(dest_point)
-        self.exclusion_list.append(dest_point)
+        
+        if (self.overlaps(world, dest_point, friendly_nest_points)):
+            return
+        
         if friendly_tiles:
             for key, value in neighbours.items():
+                
                 if world.get_tile_at(value) not in friendly_tiles:
                     
                     #avoids the neutral tile
-                    path = world.get_shortest_path(point, value, dest_point)
+                    path = world.get_shortest_path(point, value, self.goal_tiles)
                     if path:
-                        print("got path")
                         world.move(unit, path[0]);
                         return
                 
-        
-               
     
     def num_adjacent(self, world, point):
         '''
@@ -109,20 +133,29 @@ class PlayerAI:
             
         
         
-    def overlaps(self, world, neutral_point, nest_points, cluster_points):
+    def overlaps(self, world, neutral_point, nest_points):
         '''
         check to see if seizing the neutral point would create a cluster
         '''
-        neighbours = world.get_neighbours(neutral_point)
+        neighbours = world.get_tiles_around(neutral_point)
         
         for key,value in neighbours.items():
-            n_neighbours = world.get_neighbours(value)
+            n_neighbours = world.get_tiles_around(value.position)
             for n_key, n_value in n_neighbours.items():
+                print(n_value.position)
+                print(nest_points)                
                 #see if the point is a nest or a cluster point
-                for cluster_point_set in cluster_points:
-                    if ((n_value in nest_points) or (n_value in list(cluster_point_set))):
-                        #occupying this neutral point will result in a creation of a cluster
-                        return False
+                if (n_value.position in nest_points):
+                    print('will create a cluster')
+                    
+                    return False                    
+                
+                #for cluster_point_set in cluster_points:
+                    #if (n_value in list(cluster_point_set)):
+                        ##occupying this neutral point will result in a creation of a cluster
+                        #print('will create a cluster')
+                        #return False
+        print('wont create a cluster')
         return True
 
     # DEFEND NEST BEGIN ********************************************************
@@ -166,11 +199,11 @@ class PlayerAI:
         Preference given to closer tiles, and then to enemy tiles
         '''
         point = unit.position
-        capt_tile = world.get_closest_capturable_tile_from(point)
+        capt_tile = world.get_closest_capturable_tile_from(point, [self.goal_tiles, self.avoid_tiles])
         # Account for preference to (1) closer and (2) enemy tiles
         while True:
-            alt_capt_tile = get_closest_capturable_tile_from(point, capt_pos) # next closest tile
-            if world.get_shortest_path(point, capt_tile.position) == world.get_shortest_path(point, alt_capt_tile.position): # If both tiles are equidistant from self
+            alt_capt_tile = world.get_closest_capturable_tile_from(point, [self.goal_tiles, self.avoid_tiles]) # next closest tile
+            if world.get_shortest_path(point, capt_tile.position) == world.get_shortest_path(point, alt_capt_tile.position, [self.goal_tiles, self.avoid_tiles]): # If both tiles are equidistant from self
                 if capt_tile.is_neutral() and alt_capt_tile.is_enemy(): # And if one is an enemy tile
                     capt_tile = alt_capt_tile # Then go for the enemy tile
                     break
@@ -203,11 +236,15 @@ class PlayerAI:
         :param friendly_units: list of FriendlyUnit objects
         :param enemy_units: list of EnemyUnit objects
         """
-        #for unit in friendly_units:
-        #self.build_nest(world,friendly_units[0], self.exclusion_list)
-            #self.break_enemy_cluster(world, unit, self.exclusion_list)
-            #self.break_enemy_nest(world, unit, self.exclusion_list)
-            #self.attack_enemy(world, unit, self.exclusion_list)
+        for unit in friendly_units:
+            #self.attack_enemy(world, unit, self.goal_tiles)
+            self.acquire_tiles(unit, world)
+            self.break_enemy_nest(world, unit, self.goal_tiles)
+            self.break_enemy_cluster(world, unit)            
+            self.build_nest(world, unit, self.goal_tiles)
+            
+            
+            
             
     
         # Fly away to freedom, daring fireflies
