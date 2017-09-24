@@ -4,7 +4,6 @@ from PythonClientAPI.Game.Enums import Direction, MoveType, MoveResult
 from PythonClientAPI.Game.World import World
 import random
 import time
-# Momin's latest change, 1125am
 
 class PlayerAI:
 
@@ -12,8 +11,8 @@ class PlayerAI:
         """
             Any instantiation code goes here
         """
+        self.exclusion_list = []
         self.goal_tiles = []
-        self.avoid_tiles = []
     
     def break_enemy_cluster(self, world, unit):
         '''
@@ -27,12 +26,6 @@ class PlayerAI:
                     best_dist[c_point] = world.get_shortest_path_distance(unit.position, list(c_point))
             
             point = min(best_dist, key = best_dist.get)
-            
-            #avoids the neutral tile
-            path = world.get_shortest_path(unit.position, point, self.goal_tiles)
-            if path:
-                world.move(unit, path[0]);
-                return            
             world.move(unit, point)
         
     
@@ -45,12 +38,7 @@ class PlayerAI:
         point = unit.position            
         nest_tile = world.get_closest_enemy_nest_from(point, excluding_points)
         if nest_tile:
-            #avoids the neutral tile
-            path = world.get_shortest_path(point, nest_tile, self.goal_tiles)            
-            if path:
-                world.move(unit, path[0]);
-                return            
-            world.move(unit, nest_tile)
+            world.move(unit, nest_tile)#.position)
 
     def attack_enemy(self, world, unit, excluding_points = ()):
         '''
@@ -60,10 +48,6 @@ class PlayerAI:
         point = unit.position
         enemy_unit = world.get_closest_enemy_from(point, excluding_points)
         if enemy_unit:
-            #avoids the neutral tile
-            path = world.get_shortest_path(point, enemy_unit.position, self.goal_tiles)            
-            if path:
-                world.move(unit, path[0]);          
             world.move(unit, enemy_unit.position)
 
     def build_nest(self, world, unit, excluding_points = ()):
@@ -72,53 +56,44 @@ class PlayerAI:
         2) Create the nest space.
         3) Aim get_friendly_nest_clustersfor nests that are far away from the enemy.
         '''
-        friendly_cluster_points = world.get_friendly_nest_clusters()
-        friendly_nest_points = world.get_friendly_nest_positions() 
-        if self.goal_tiles:
-            #Get rid of non neutral tiles from the goal tiles
-            for i in range(len(self.goal_tiles)):
-                if (not world.get_tile_at(self.goal_tiles[i]).is_neutral()) or (self.overlaps(world, self.goal_tiles[i], friendly_nest_points, friendly_cluster_points)):
-                #if (not world.get_tile_at(self.goal_tiles[i]).is_neutral()):
-                    popped = self.goal_tiles.pop(i)
-            
-        point = unit.position
         
+        point = unit.position
+        friendly_cluster_points = world.get_friendly_nest_clusters()
+        friendly_nest_points = world.get_friendly_nest_positions()
         neutral_tiles = world.get_neutral_tiles()
         best_dist = {}
         if not self.goal_tiles:
             for neutral_tile in neutral_tiles:
                 neutral_point = neutral_tile.position
                 #if the neutral point is near the cluster point or the nest point, just acquire the tile
-                if self.overlaps(world, neutral_point, friendly_nest_points):
+                if self.overlaps(world, neutral_point, friendly_nest_points, friendly_cluster_points):
                     continue
-                #else:
-                #Heuristics: find neutral point that is further away from enemy and also close to forming the nest.
-                length = world.get_shortest_path_distance(neutral_point, world.get_closest_enemy_nest_from(neutral_point, excluding_points))*(self.num_adjacent(world, neutral_point))
-                best_dist[neutral_point] = length
+                else:
+                    #Heuristics: find neutral point that is further away from enemy and also close to forming the nest.
+                    length = world.get_shortest_path_distance(neutral_point, world.get_closest_enemy_nest_from(neutral_point, excluding_points))*(self.num_adjacent(world, neutral_point))
+                    best_dist[neutral_point] = length
 
         if best_dist:
             dest_point = max(best_dist, key = best_dist.get)
-            if dest_point not in self.goal_tiles:
-                self.goal_tiles.append(dest_point)
+            self.goal_tiles.append(dest_point)
         else:
-            dest_point = self.goal_tiles[randint(0,len(self.goal_tiles)-1)]
+            dest_point = self.goal_tiles[0]
         friendly_tiles = world.get_friendly_tiles_around(dest_point)
         neighbours = world.get_neighbours(dest_point)
-        
-        if (self.overlaps(world, dest_point, friendly_nest_points)):
-            return
-        
+        self.exclusion_list.append(dest_point)
         if friendly_tiles:
             for key, value in neighbours.items():
-                
                 if world.get_tile_at(value) not in friendly_tiles:
                     
                     #avoids the neutral tile
-                    path = world.get_shortest_path(point, value, self.goal_tiles)
+                    path = world.get_shortest_path(point, value, dest_point)
                     if path:
+                        print("got path")
                         world.move(unit, path[0]);
                         return
                 
+        
+               
     
     def num_adjacent(self, world, point):
         '''
@@ -135,27 +110,20 @@ class PlayerAI:
             
         
         
-    def overlaps(self, world, neutral_point, nest_points):
+    def overlaps(self, world, neutral_point, nest_points, cluster_points):
         '''
         check to see if seizing the neutral point would create a cluster
         '''
-        neighbours = world.get_tiles_around(neutral_point)
+        neighbours = world.get_neighbours(neutral_point)
         
         for key,value in neighbours.items():
-            n_neighbours = world.get_tiles_around(value.position)
+            n_neighbours = world.get_neighbours(value)
             for n_key, n_value in n_neighbours.items():
-                print(n_value.position)
-                print(nest_points)                
                 #see if the point is a nest or a cluster point
-                if (n_value.position in nest_points):
-                    
-                    return False                    
-                
-                #for cluster_point_set in cluster_points:
-                    #if (n_value in list(cluster_point_set)):
-                        ##occupying this neutral point will result in a creation of a cluster
-                        #print('will create a cluster')
-                        #return False
+                for cluster_point_set in cluster_points:
+                    if ((n_value in nest_points) or (n_value in list(cluster_point_set))):
+                        #occupying this neutral point will result in a creation of a cluster
+                        return False
         return True
 
     # DEFEND NEST BEGIN ********************************************************
@@ -231,7 +199,6 @@ class PlayerAI:
         Preference given to closer tiles, and then to enemy tiles
         '''
         point = unit.position
-
         capt_tile = world.get_closest_capturable_tile_from(point, ())
         alt_capt_tile = world.get_closest_capturable_tile_from(point, capt_tile.position) # next closest tile
         dest = random.choice([capt_tile, alt_capt_tile])
@@ -247,7 +214,6 @@ class PlayerAI:
             elif random.choice([1,2])==1: 
                 capt_tile = alt_capt_tile
         if self.is_conflict(capt_tile.position): return
-
         world.move(unit, capt_tile.position)
             
     def is_adjacent(self, pos1, pos2):
@@ -350,7 +316,9 @@ class PlayerAI:
                 print('defending nest')
                 nest_pos = world.get_closest_enemy_nest_from(unit.position,())
                 self.defend_nest_move(unit, world, nest_pos)'''
-                                    
+                                      
+    
+  
             
     
         # Fly away to freedom, daring fireflies
